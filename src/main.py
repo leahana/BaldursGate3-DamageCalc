@@ -144,38 +144,6 @@ def simulate_attack_rolls(trials, advantage_type='无', crit_threshold=20):
     return basic_rolls, critical_fails, critical_hits, normal_attacks
 
 
-# def process_attacks(basic_rolls, crit_threshold):
-#     """
-#       处理攻击掷骰结果，确定每次攻击是否是严重失误、暴击或普通攻击。
-#
-#       :param basic_rolls: numpy array，包含所有基础攻击掷骰的结果。
-#       :param crit_threshold: int，暴击的阈值，掷骰结果大于等于这个值表示暴击。
-#
-#       :return:
-#           - critical_fails: numpy array (布尔型)，标记每次攻击是否为严重失误（掷骰结果为1）。
-#           - critical_hits: numpy array (布尔型)，标记每次攻击是否为暴击（掷骰结果大于等于暴击阈值）。
-#           - normal_attacks: numpy array (布尔型)，标记每次攻击是否为普通攻击（非严重失误且非暴击）。
-#
-#       此函数主要用于初步分析攻击掷骰结果：
-#       - 严重失误是指基础掷骰结果为1，通常在大多数桌面角色扮演游戏中视为自动失败，不进行任何进一步的命中或伤害计算。
-#       - 暴击是指掷骰结果达到或超过了设定的暴击阈值，通常视为自动命中，并可能触发额外的伤害效果。
-#       - 普通攻击则是既不是严重失误也不是暴击的攻击，需要进一步根据攻击加值来确定是否能够击中目标。
-#
-#       通过分离这三种情况，可以为后续的命中和伤害计算提供清晰的基础。
-#       """
-#
-#     # 严重失误，即掷骰结果为1
-#     critical_fails = (basic_rolls == 1)
-#
-#     # 暴击，即掷骰结果大于等于暴击阈值
-#     critical_hits = (basic_rolls >= crit_threshold)
-#
-#     # 普通命中，加入额外攻击掷加值和攻击固定加值后再判断是否命中
-#     normal_attacks = (~critical_fails) & (~critical_hits)
-#
-#     return critical_fails, critical_hits, normal_attacks
-
-
 def calculate_additions(basic_rolls, critical_hits, attack_dice_list, attack_modifiers, trials, normal_attacks,
                         target_ac):
     """
@@ -250,25 +218,29 @@ def calculate_damage_and_averages(hits, critical_hits, critical_fails, damage_ex
     average_damage_all = np.mean(damage_per_attack)  # 所有攻击的平均伤害
     average_damage_hits = np.mean(damage_per_attack[hits]) if np.any(hits) else 0  # 命中攻击的平均伤害
     average_damage_critical = np.mean(damage_per_attack[critical_hits]) if np.any(critical_hits) else 0  # 暴击的平均伤害
-    print('命中率:', np.sum(hits) / np.array(hits).size)
-    print('大失败失误率:', np.sum(critical_fails) / np.array(critical_fails).size)
-    print('暴击率：', np.sum(critical_hits) / np.array(critical_hits).size)
+
+    hit_probability = np.sum(hits) / np.array(hits).size
+    fails_probability = np.sum(critical_fails) / np.array(critical_fails).size
+    crit_probability = np.sum(critical_hits) / np.array(critical_hits).size
+
+    print(f'\n命中率：{hit_probability:.2%},大失败概率：{fails_probability:.2%}, 暴击率：{crit_probability:.2%}')
 
     return average_damage_all, average_damage_hits, average_damage_critical
 
 
 def attack_process(target_ac,
                    target_hp,
-                   damage_bonus_expression,
+                   damage_expression,
                    attack_expression,
                    num_attacks=1,
                    advantage_type='无',
                    trials=100000,
                    crit_threshold=20):
     """
+    处理攻击
     :param target_ac: 目标ac
     :param target_hp: 目标hp
-    :param damage_bonus_expression:  伤害掷骰
+    :param damage_expression:  伤害掷骰
     :param attack_expression: 攻击掷骰 默认1D20无加成
     :param num_attacks: 攻击次数
     :param advantage_type:  '优势','劣势','无'
@@ -286,54 +258,113 @@ def attack_process(target_ac,
     average_damage_all, average_damage_hits, average_damage_critical = calculate_damage_and_averages(hit_results,
                                                                                                      critical_hits,
                                                                                                      critical_fails,
-                                                                                                     damage_bonus_expression)
-    print(f'不包含暴击期望伤害{average_damage_all:.2f}', f'含暴击期望伤害{average_damage_hits:.2f}',
-          f'暴击期望伤害{average_damage_critical:.2f}')
+                                                                                                     damage_expression)
+
+    print(f"\n进行攻击计算：\n"
+          f"目标AC: {target_ac}\n目标HP: {target_hp}\n伤害表达式: {damage_expression}\n攻击表达式: {attack_expression}\n"
+          f"攻击次数: {num_attacks}\n优势: {advantage_type}\n模拟次数: {trials}\n暴击阈值: {crit_threshold}")
+    print(f'\n单次攻击期望伤害(无暴击){average_damage_all:.2f}',
+          f'\n单次攻击期望伤害(含暴击){average_damage_hits:.2f}',
+          f'\n暴击期望伤害(仅暴击){average_damage_critical:.2f}')
 
 
-def get_boolean_input(prompt):
-    """获取布尔类型的输入，返回布尔值"""
+def get_boolean_input(prompt, default=True):
+    """
+    获取布尔型用户输入。
+
+    :param prompt: str, 提示信息
+    :param default: 默认布尔值
+    :return: bool
+    """
+    true_values = {'yes', 'y', '是', '1', 'true', 't'}
+    false_values = {'no', 'n', '否', '0', 'false', 'f'}
+
+    if default:
+        prompt = f"{prompt} (默认: 是): "
+    else:
+        prompt = f"{prompt} (默认: 否): "
+
     while True:
-        input_str = input(prompt).lower()
-        if input_str in ['是', 'yes', 'y', 'true', '1']:
+        user_input = input(prompt).strip().lower()
+        if not user_input and default is not None:
+            return default
+        if user_input in true_values:
             return True
-        elif input_str in ['否', 'no', 'n', 'false', '0']:
+        if user_input in false_values:
             return False
-        else:
-            print("输入无效，请输入是或否（例如：是、否 /yes or no）。")
+        print("请输入有效的选项：是/否 (yes/no)")
 
 
-def get_positive_integer(prompt):
-    """获取正整数的输入，用于次数和数量的输入验证"""
-    while True:
-        input_str = input(prompt)
-        if input_str.isdigit() and int(input_str) > 0:
-            return int(input_str)
-        else:
-            print("输入无效，请输入一个正整数。")
+def get_user_input(prompt, default=None, input_type=str):
+    """
+    获取用户输入并使用默认值。
+
+    :param prompt: str, 提示信息
+    :param default: 默认值
+    :param input_type: 输入数据类型，默认为字符串
+    :return: 用户输入的值或默认值
+    """
+    if default is not None:
+        prompt = f"{prompt} (默认: {default}): "
+    user_input = input(prompt)
+    if not user_input and default is not None:
+        return default
+    try:
+        return input_type(user_input)
+    except ValueError:
+        print(f"无效输入，请输入{input_type.__name__}类型的数据")
+        return get_user_input(prompt, default, input_type)
 
 
 def main():
-    print("\n")
-    print("========================================")
-    print("欢迎使用闲的一比的真见美写的bd3伤害期望计算器！")
-    print("========================================")
     while True:
         print("\n--- 新的伤害计算 ---")
-        attack_dice_expression = input("请输入攻击加值表达式，无需输入D20基础攻击骰，\n神射手+祝福术+4敏捷调整值（例如：-5+1D4+4）: ")
-        damage_dice_expression = input("请输入伤害表达式（例如：2D8+10+4+1D6）: ")
-        attack_dice_expression.upper().replace(" ", "")
-        damage_dice_expression.upper().replace(" ", "")
-        critical_hit = int(input("请输入模拟次数(默认10000上限1000000): "))
-        advantage_type = input("请输入优势，劣势，无 : ")
-        target_ac = int(input("请输入目标AC : "))
-        crit_threshold = int(input("请输入暴击阈值 : "))
-        attack_process(target_ac, 80, damage_dice_expression, attack_dice_expression, 1, advantage_type, critical_hit,
-                       crit_threshold)
+        attack_dice_expression = get_user_input(
+            "请输入攻击加值表达式，无需输入D20基础攻击骰，\n神射手+祝福术+4敏捷调整值（例如：-5+1D4+4）",
+            default="-5+1D4+4"
+        ).upper().replace(" ", "")
+
+        damage_dice_expression = get_user_input(
+            "请输入伤害表达式（例如：2D8+10+4+1D6）",
+            default="2D8+10+4+1D6"
+        ).upper().replace(" ", "")
+
+        critical_hit = get_user_input(
+            "请输入模拟次数(默认10000，上限1000000)",
+            default=10000,
+            input_type=str
+        )
+
+        advantage_type = get_user_input(
+            "请输入优势，劣势，无",
+            default="无"
+        ).strip()
+
+        target_ac = get_user_input(
+            "请输入目标AC",
+            default=15,
+            input_type=str
+        )
+
+        crit_threshold = get_user_input(
+            "请输入暴击阈值",
+            default=20,
+            input_type=str
+        )
+
+        attack_process(
+            target_ac,
+            80,
+            damage_dice_expression,
+            attack_dice_expression,
+            1,
+            advantage_type,
+            critical_hit,
+            crit_threshold
+        )
 
         # 计算伤害
-        # 询问用户是否继续
-        continue_running = get_boolean_input("您是否想进行另一次计算？（是/否 yes or no）: ")
+        continue_running = get_boolean_input("您是否想进行另一次计算？（是/否 yes or no）", default=True)
         if not continue_running:
             break
 
