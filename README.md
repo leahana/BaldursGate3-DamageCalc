@@ -1,2 +1,2 @@
 # BaldursGate3-DamageCalc
-dnd规则，python数据处理学习中
+简单期望伤害计算脚本
